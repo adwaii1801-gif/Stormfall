@@ -1,0 +1,1245 @@
+<title>Stormfall Royale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600;800&display=swap">
+<style>
+/* Layout: one full-screen canvas, HUD pinned to the corners, a six-slot hotbar at the bottom, menus as centred cards */
+:root{
+  --ink:#121613; --panel:rgba(16,20,17,.78); --line:rgba(236,232,214,.14);
+  --paper:#ece8d6; --dim:#a9ad98; --accent:#ff8a3d; --hp:#6ad26a; --shield:#58b8ff; --storm:#7b55d6;
+  --display:"Bungee", "Impact", "Arial Black", sans-serif;
+  --ui:"Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%;overflow:hidden;background:var(--ink);color:var(--paper);font-family:var(--ui)}
+body{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#game{position:fixed;inset:0;display:block;touch-action:none;cursor:crosshair;background:#55703f}
+
+/* HUD */
+#hud{position:fixed;inset:0;pointer-events:none}
+.tl{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));display:flex;gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 12px;display:flex;align-items:baseline;gap:6px}
+.stat b{font-family:var(--display);font-size:22px;font-weight:400;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+#stormMsg{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+#stormMsg.warn{color:#d9c8ff;border-color:var(--storm)}
+#mini{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));width:150px;height:150px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
+#feed{position:absolute;top:calc(172px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:12px}
+#feed div{background:var(--panel);padding:4px 9px;border-radius:6px}
+#feed .me{color:var(--accent);font-weight:600}
+#prompt{position:absolute;left:50%;bottom:calc(140px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.bottom{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;gap:8px;width:min(600px,calc(100vw - 24px))}
+.bars{width:min(420px,100%);display:flex;flex-direction:column;gap:4px}
+.bar{position:relative;height:10px;border-radius:5px;background:rgba(0,0,0,.45);overflow:hidden;border:1px solid var(--line)}
+.bar.hp{height:18px}
+.bar i{position:absolute;inset:0 auto 0 0;width:100%;transition:width .15s}
+.bar.hp i{background:var(--hp)}
+.bar.sh i{background:var(--shield)}
+.bar span{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+.row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;width:100%;pointer-events:auto}
+.slot{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:5px 7px;min-height:48px;display:flex;flex-direction:column;justify-content:flex-end;position:relative;overflow:hidden;cursor:pointer;min-width:0}
+.slot.on{border-color:var(--paper);background:rgba(40,44,36,.9)}
+.slot{touch-action:none}
+.slot.lifted{opacity:.35}
+.slot.drop{border-style:dashed;border-color:var(--accent)!important}
+.slot.ghost{position:fixed;z-index:50;pointer-events:none;transform:translate(-50%,-60%) scale(1.08);box-shadow:0 10px 30px rgba(0,0,0,.5);border-color:var(--accent)}
+.slot .n{font-weight:800;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .a{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.slot .rl{position:absolute;left:0;bottom:0;height:3px;background:var(--accent)}
+.slot .ic{position:absolute;top:4px;right:4px;height:20px;max-width:70%;object-fit:contain}
+.slot .k{position:absolute;top:4px;left:7px;font-size:10px;font-weight:800;color:var(--dim)}
+
+#reloadBox{position:absolute;right:calc(14px + env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);width:150px;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+#reloadBox .t{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:800}
+#reloadBox .s{font-family:var(--display);font-size:28px;line-height:1;font-variant-numeric:tabular-nums}
+#reloadBox .g{font-size:12px;color:var(--dim)}
+#reloadBox .pb{height:5px;border-radius:3px;background:rgba(0,0,0,.5);overflow:hidden}
+#reloadBox .pb i{display:block;height:100%;background:var(--accent)}
+.lob{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto}
+.lob div{display:flex;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-weight:600;min-width:0}
+.lob div span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lob em{font-style:normal;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex:none}
+.go.alt{background:transparent;color:var(--paper);border:1px solid var(--line);font-size:16px}
+.btns{display:flex;flex-direction:column;gap:8px}
+.note{font-size:12px}
+
+/* Touch controls */
+#touch{position:absolute;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(150px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:repeat(2,64px);gap:8px;pointer-events:auto}
+#touch button{height:46px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--paper);font:600 12px var(--ui)}
+#touch button:active{background:var(--accent);color:var(--ink)}
+
+/* Menus */
+.screen{position:fixed;inset:0;display:grid;place-items:center;background:rgba(14,12,26,.55);padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));overflow:auto}
+.card{width:min(460px,100%);background:var(--ink);border:1px solid var(--line);border-radius:18px;padding:26px 24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.card h1{font-family:var(--display);font-weight:400;font-size:clamp(34px,9vw,50px);line-height:.95;margin:0;text-wrap:balance}
+.card h1 em{font-style:normal;color:var(--accent);display:block;font-size:.5em;letter-spacing:.2em;margin-top:6px}
+.card p{margin:0;color:var(--dim);line-height:1.5}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;color:var(--dim)}
+.keys b{color:var(--paper);font-weight:600}
+.card label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.card input{width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--paper);font:600 16px var(--ui)}
+.card input:focus-visible,.go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.go{padding:14px;border:0;border-radius:12px;background:var(--accent);color:var(--ink);font-family:var(--display);font-size:20px;cursor:pointer}
+.go:hover{filter:brightness(1.08)}
+.place{font-family:var(--display);font-size:64px;line-height:1;margin:0}
+.place small{font-size:.35em;color:var(--dim)}
+.sum{display:flex;gap:10px}
+.sum div{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+.sum b{display:block;font-family:var(--display);font-weight:400;font-size:24px}
+.sum span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+@media (max-width:600px){#mini{width:110px;height:110px}#feed{top:calc(130px + env(safe-area-inset-top,0px))}.tl .stat b{font-size:18px}#stormMsg{top:calc(58px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));transform:none}.slot{padding:4px 5px;min-height:44px}.slot .n{font-size:10px}.slot .a{font-size:10px}}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+
+<canvas id="game"></canvas>
+
+<div id="hud" hidden>
+  <div class="tl">
+    <div class="stat"><b id="alive">30</b><span>alive</span></div>
+    <div class="stat"><b id="kills">0</b><span>kills</span></div>
+  </div>
+  <div id="stormMsg"></div>
+  <canvas id="mini" width="300" height="300"></canvas>
+  <div id="feed"></div>
+  <div id="prompt" hidden></div>
+  <div id="reloadBox" hidden><span class="t">Reloading</span><span class="s" id="rlSec">0.0s</span><span class="g" id="rlGun"></span><div class="pb"><i id="rlBar"></i></div></div>
+  <div id="touch" hidden>
+    <button id="tPick" type="button">Open / Pick</button>
+    <button id="tReload" type="button">Reload</button>
+  </div>
+  <div class="bottom">
+    <div class="bars">
+      <div class="bar sh"><i id="shBar"></i></div>
+      <div class="bar hp"><i id="hpBar"></i><span id="hpTxt">100</span></div>
+    </div>
+    <div class="row" id="slots"></div>
+  </div>
+</div>
+
+<div class="screen" id="menu">
+  <div class="card">
+    <h1>Stormfall<em>Royale</em></h1>
+    <p>30 drop in with nothing but their fists. Crack crates, grab better guns, stay ahead of the storm. Last one standing wins.</p>
+    <div class="keys">
+      <b>WASD</b><span>Move</span>
+      <b>Mouse</b><span>Aim. Hold click to shoot, punch or heal</span>
+      <b>E</b><span>Open crates and pick up items</span>
+      <b>1</b><span>Fists</span>
+      <b>2 – 6</b><span>Guns, medkits and shield potions</span>
+      <b>R</b><span>Reload</span>
+      <b>Phone</b><span>Left thumb moves, right thumb aims and fires, tap a slot to equip</span>
+    </div>
+    <div><label for="nameIn">Your name</label><input id="nameIn" maxlength="14" value="Player" autocomplete="off"></div>
+    <div class="btns">
+      <button class="go" id="playBtn" type="button">Play solo</button>
+      <button class="go alt" id="mpBtn" type="button" hidden>Play with friends</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="lobby" hidden>
+  <div class="card">
+    <h1>Lobby<em>Stormfall</em></h1>
+    <p id="lobbyMsg">Connecting…</p>
+    <div class="lob" id="lobbyList"></div>
+    <p class="note">Anyone who opens this page and taps Play with friends shows up here. Bots fill the rest of the island.</p>
+    <div class="btns">
+      <button class="go" id="lobbyStart" type="button" hidden>Start match</button>
+      <button class="go alt" id="lobbyBack" type="button">Back</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="over" hidden>
+  <div class="card">
+    <p id="overTitle" style="font-weight:800;color:var(--paper);letter-spacing:.1em;text-transform:uppercase;font-size:13px">Eliminated</p>
+    <p class="place" id="overPlace">#12<small> / 30</small></p>
+    <p id="overBy"></p>
+    <div class="sum">
+      <div><b id="oK">0</b><span>Kills</span></div>
+      <div><b id="oD">0</b><span>Damage</span></div>
+      <div><b id="oT">0:00</b><span>Survived</span></div>
+    </div>
+    <p class="note" id="overNote" hidden></p>
+    <div class="btns">
+      <button class="go" id="againBtn" type="button">Play again</button>
+      <button class="go alt" id="menuBtn" type="button">Main menu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+const TAU = Math.PI * 2, W = 4200, BOTS = 29, SLOTS = 6, STACK = 3;
+const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+const mini = document.getElementById('mini'), mctx = mini.getContext('2d');
+const $ = id => document.getElementById(id);
+let RNG = Math.random;
+const rnd = (a, b) => a + RNG() * (b - a);
+const mulberry = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+const RAR = [
+  { n: 'Common', c: '#c9cdb8', m: 1 },
+  { n: 'Rare', c: '#4ea3ff', m: 1.12 },
+  { n: 'Epic', c: '#b67bff', m: 1.25 },
+  { n: 'Legendary', c: '#ffb12e', m: 1.4 }
+];
+const GUNS = {
+  ar:   { name: 'AR',          dmg: 19, rate: .14, spd: 1650, spread: .05, mag: 30, reload: 2.0, pel: 1, range: 1100, len: 38, v: 2.8 },
+  pump: { name: 'Pump',        dmg: 11, rate: .9,  spd: 1250, spread: .28, mag: 6,  reload: 2.4, pel: 7, range: 470,  len: 32, v: 2.5 },
+  bolt: { name: 'Bolt Sniper', dmg: 82, rate: 1.4, spd: 2700, spread: .004,mag: 5,  reload: 2.8, pel: 1, range: 1450, len: 50, v: 2.6 },
+  smg:  { name: 'SMG',         dmg: 9, rate: .08, spd: 1350, spread: .13, mag: 24, reload: 1.6, pel: 1, range: 780,  len: 26, v: 2.3 }
+};
+const GUN_TYPES = ['ar', 'pump', 'bolt', 'smg'], GUN_W = [.3, .26, .14, .3];
+// top-down colour of the gun in a player's hands, matching each silhouette's main colour
+const GUN_TOP = { ar: '#2b2f35', pump: '#c46a2c', bolt: '#8a4e25', smg: '#b99a62' };
+
+// side-on silhouettes, pointing right, roughly 70 x 26 units, centred on 0,0
+const DARK = '#2b2f35', STEEL = '#545b64', WOOD = '#c46a2c', WALNUT = '#8a4e25', TAN = '#c9a96e', EDGE = '#14161a';
+function drawGun(c, t, rc) {
+  const poly = (fill, ...pts) => { c.fillStyle = fill; c.beginPath(); c.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]); c.closePath(); c.fill(); c.stroke(); };
+  c.save(); c.strokeStyle = EDGE; c.lineWidth = 2; c.lineJoin = 'round';
+  if (t === 'ar') {
+    poly(DARK, -33, -6, -21, -7, -19, 1, -31, 6);           // stock
+    poly(DARK, -13, 1, -7, 1, -9, 10, -15, 10);             // grip
+    poly(DARK, -2, 1, 5, 1, 8, 12, 1, 13);                  // curved mag
+    poly(STEEL, -20, -7, 6, -7, 6, 2, -20, 2);              // receiver
+    poly(DARK, 6, -6, 21, -6, 21, 1, 6, 1);                 // handguard
+    poly(DARK, 21, -4, 30, -4, 30, -1, 21, -1);             // barrel
+    poly(DARK, 30, -5, 34, -5, 34, 0, 30, 0);               // muzzle
+    poly(DARK, -11, -11, -1, -11, -1, -7, -11, -7);         // carry rail
+    c.fillStyle = rc; c.fillRect(-17, -4, 18, 3);           // rarity stripe
+    c.fillStyle = STEEL; for (let x = 9; x < 20; x += 4) c.fillRect(x, -4, 2, 3);
+  } else if (t === 'pump') {
+    poly(WOOD, -34, -4, -15, -6, -15, 2, -31, 6);           // stock
+    poly(DARK, -15, -6, 3, -6, 3, 2, -15, 2);               // receiver
+    poly(DARK, 3, -6, 35, -6, 35, -3, 3, -3);               // long barrel
+    poly(STEEL, 3, -2, 30, -2, 30, 1, 3, 1);                // mag tube
+    poly(WOOD, 9, -3, 22, -3, 22, 3, 9, 3);                 // pump grip
+    c.fillStyle = WALNUT; for (let x = 11; x < 21; x += 3) c.fillRect(x, -2, 1.5, 4);
+    c.fillStyle = rc; c.fillRect(-12, -4, 12, 3);
+  } else if (t === 'bolt') {
+    poly(WALNUT, -36, -3, -16, -5, -6, -2, -6, 3, -16, 3, -24, 1, -34, 6); // long stock
+    poly(DARK, -6, -4, 5, -4, 5, 2, -6, 2);                 // receiver
+    poly(DARK, 5, -3, 38, -3, 38, -1, 5, -1);               // thin barrel
+    poly(WALNUT, 5, -1, 20, -1, 18, 3, 5, 3);               // forestock
+    poly(DARK, -9, -12, 9, -12, 9, -7, -9, -7);             // scope tube
+    poly(DARK, 9, -13, 12, -13, 12, -6, 9, -6);             // scope bell
+    poly(DARK, -5, -7, -2, -7, -2, -4, -5, -4);
+    poly(DARK, 3, -7, 6, -7, 6, -4, 3, -4);
+    c.fillStyle = rc; c.beginPath(); c.arc(1, 4.5, 2.5, 0, TAU); c.fill(); c.stroke(); // bolt knob
+    c.fillRect(-7, -11, 14, 2);
+  } else {
+    c.lineWidth = 3; c.strokeStyle = DARK;                  // folding wire stock
+    c.beginPath(); c.moveTo(-12, -4); c.lineTo(-24, -4); c.lineTo(-24, 3); c.lineTo(-12, 0); c.stroke();
+    c.strokeStyle = EDGE; c.lineWidth = 2;
+    poly(DARK, 3, 1, 8, 1, 8, 15, 3, 15);                   // straight stick mag
+    poly(DARK, -9, 1, -4, 1, -6, 10, -11, 10);              // grip
+    poly(TAN, -13, -7, 12, -7, 12, 2, -13, 2);              // body
+    poly(DARK, 12, -5, 22, -5, 22, -1, 12, -1);             // short barrel
+    poly(DARK, -6, -10, 0, -10, 0, -7, -6, -7);             // sight
+    c.fillStyle = rc; c.fillRect(-10, -4, 16, 3);
+  }
+  c.restore();
+}
+const iconCache = {};
+function gunIcon(t, r) {
+  const k = t + r; if (iconCache[k]) return iconCache[k];
+  const c = document.createElement('canvas'); c.width = 160; c.height = 64;
+  const x = c.getContext('2d'); x.translate(80, 30); x.scale(2, 2); drawGun(x, t, RAR[r].c);
+  return iconCache[k] = c.toDataURL();
+}
+const FIST = { dmg: 8, rate: .42, reach: 34 };
+const PHASES = [
+  { w: 35, s: 30, f: .6,  d: 2 }, { w: 28, s: 25, f: .55, d: 4 }, { w: 24, s: 20, f: .5, d: 7 },
+  { w: 20, s: 18, f: .45, d: 10 }, { w: 15, s: 15, f: .4, d: 15 }, { w: 12, s: 15, f: 0,  d: 25 }
+];
+const SYL = ['zor', 'ka', 'vex', 'lu', 'mo', 'rin', 'tak', 'shi', 'bo', 'nyx', 'pa', 'gro', 'el', 'dax', 'qu', 'fen', 'ru', 'jin'];
+const botName = () => { let s = ''; const n = 2 + (Math.random() * 2 | 0); for (let i = 0; i < n; i++) s += SYL[Math.random() * SYL.length | 0]; return s[0].toUpperCase() + s.slice(1) + (Math.random() < .4 ? (Math.random() * 99 | 0) : ''); };
+
+let DPR = 1, VW = 0, VH = 0, SC = 1, BASE = 1, ZM = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1); VW = innerWidth; VH = innerHeight;
+  cv.width = VW * DPR; cv.height = VH * DPR; cv.style.width = VW + 'px'; cv.style.height = VH + 'px';
+  BASE = clamp(Math.max(VW, VH) / 1500, .5, 1.2); SC = BASE * ZM;
+}
+addEventListener('resize', resize); resize();
+
+// ---------- state ----------
+let state = 'menu', players = [], me = null, obs = [], trees = [], loot = [], bullets = [], parts = [], floats = [], feed = [];
+let zone = null, cam = { x: W / 2, y: W / 2 }, gameT = 0, dmgDealt = 0, killedBy = '';
+
+// ---------- items ----------
+function rollRarity(boost) { const v = RNG() + (boost || 0); return v > 1.02 ? 3 : v > .9 ? 2 : v > .62 ? 1 : 0; }
+function randType() { let v = RNG(); for (let i = 0; i < GUN_TYPES.length; i++) { v -= GUN_W[i]; if (v <= 0) return GUN_TYPES[i]; } return 'ar'; }
+const makeGun = (t, r) => ({ k: 'gun', t, r, ammo: GUNS[t].mag });
+const itemVal = it => !it ? 0 : it.k === 'gun' ? GUNS[it.t].v * RAR[it.r].m : it.k === 'fist' ? .3 : .9;
+const itemName = it => it.k === 'gun' ? `${RAR[it.r].n} ${GUNS[it.t].name}` : it.k === 'med' ? 'Medkit' : 'Shield Potion';
+const itemColor = it => it.k === 'gun' ? RAR[it.r].c : it.k === 'med' ? '#ff7a68' : '#58b8ff';
+function dropItem(x, y, item) { loot.push({ x, y, item, bob: Math.random() * TAU }); }
+function dropRandom(x, y, boost) {
+  const v = RNG();
+  dropItem(x, y, v < .62 ? makeGun(randType(), rollRarity(boost)) : v < .83 ? { k: 'med', n: 1 } : { k: 'shield', n: 1 });
+}
+
+function gen(seed) {
+  RNG = mulberry(seed);
+  obs = []; trees = []; loot = []; bullets = []; parts = []; floats = []; feed = [];
+  const free = (x, y, r) => obs.every(o => Math.hypot(o.x - x, o.y - y) > o.r + r + 26);
+  for (let i = 0; i < 150; i++) { const r = rnd(26, 62), x = rnd(100, W - 100), y = rnd(100, W - 100); if (free(x, y, r)) obs.push({ x, y, r, k: 'rock' }); }
+  for (let i = 0; i < 140; i++) { const x = rnd(100, W - 100), y = rnd(100, W - 100); if (free(x, y, 30)) obs.push({ x, y, r: 28, k: 'crate' }); }
+  for (let i = 0; i < 190; i++) trees.push({ x: rnd(0, W), y: rnd(0, W), r: rnd(60, 115), a: 1 });
+  for (let i = 0; i < 110; i++) { const x = rnd(100, W - 100), y = rnd(100, W - 100); if (free(x, y, 10)) dropRandom(x, y, 0); }
+  ZS = buildZone(seed);
+  RNG = Math.random;
+}
+
+// the storm is a pure function of match time, so every player computes the same circle
+let ZS = [];
+function buildZone(seed) {
+  const R = mulberry(seed ^ 0x5bd1e995); let cx = W / 2, cy = W / 2, r = W * .72, t = 0; const out = [];
+  for (const P of PHASES) {
+    const tr = r * P.f, a = R() * TAU, d = R() * Math.max(0, r - tr) * .8;
+    const tx = clamp(cx + Math.cos(a) * d, 300, W - 300), ty = clamp(cy + Math.sin(a) * d, 300, W - 300);
+    out.push({ t1: t + P.w, t2: t + P.w + P.s, sx: cx, sy: cy, sr: r, tx, ty, tr, d: P.d });
+    t += P.w + P.s; cx = tx; cy = ty; r = tr;
+  }
+  return out;
+}
+function zoneAt(T) {
+  let p = ZS[ZS.length - 1];
+  for (const q of ZS) if (T < q.t2) { p = q; break; }
+  if (T < p.t1) return { cx: p.sx, cy: p.sy, r: p.sr, tx: p.tx, ty: p.ty, tr: p.tr, state: 'wait', t: p.t1 - T, d: p.d };
+  const k = clamp((T - p.t1) / (p.t2 - p.t1), 0, 1);
+  return { cx: p.sx + (p.tx - p.sx) * k, cy: p.sy + (p.ty - p.sy) * k, r: p.sr + (p.tr - p.sr) * k, tx: p.tx, ty: p.ty, tr: p.tr, state: 'shrink', t: Math.max(0, p.t2 - T), d: p.d };
+}
+
+function mkP(name, bot) {
+  let x, y, tries = 0;
+  do { x = rnd(200, W - 200); y = rnd(200, W - 200); tries++; }
+  while (tries < 200 && (obs.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 40) || players.some(p => Math.hypot(p.x - x, p.y - y) < 500) || [...ghosts.values()].some(p => Math.hypot(p.x - x, p.y - y) < 500)));
+  const inv = [{ k: 'fist' }]; for (let i = 1; i < SLOTS; i++) inv.push(null);
+  return {
+    name, bot, x, y, r: 22, ang: rnd(0, TAU), hp: 100, sh: 0, inv, cur: 0,
+    cool: 0, reloadT: 0, useT: 0, useK: null, kills: 0, alive: true, under: false,
+    hue: rnd(0, 360), recoil: 0, hitT: 0, swingT: 0, side: 0, vx: 0, vy: 0,
+    ai: { t: Math.random() * .3, tx: x, ty: y, target: null, react: 0, strafe: 1, err: 0, wanderT: 0, crate: null, goal: null, stuck: 0, unstuck: 0, ux: 0, uy: 0 }
+  };
+}
+
+const myName = () => (($('nameIn').value || 'Player').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g, '').trim().slice(0, 14)) || 'Player';
+let botNames = [];
+function beginMatch(seed, withBots) {
+  ghosts.clear(); players = [];
+  gen(seed);
+  me = mkP(myName(), false); players.push(me);
+  botNames = [];
+  if (withBots) for (let i = 0; i < BOTS; i++) { const b = mkP(botName(), true); b.id = i; botNames.push(b.name); players.push(b); }
+  gameT = 0; zone = zoneAt(0); dmgDealt = 0; killedBy = ''; hostSeen = false;
+  myShots = []; seenShots.clear(); counted.clear();
+  cam.x = me.x; cam.y = me.y;
+  state = 'play';
+  for (const id of ['menu', 'over', 'lobby']) $(id).hidden = true;
+  $('hud').hidden = false;
+  buildSlots(); renderFeed();
+}
+function startSolo() { leaveNet(); beginMatch((Math.random() * 2 ** 31) | 0, true); }
+
+// ---------- input ----------
+const keys = {}; let mouse = { x: 0, y: 0, down: false }, isTouch = false;
+const sticks = { move: null, aim: null };
+addEventListener('keydown', e => {
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') { if (e.code === 'Enter' && state === 'menu') startSolo(); return; }
+  keys[e.code] = true;
+  if (state !== 'play' || !me.alive) return;
+  if (e.code === 'KeyE') interact(me);
+  if (e.code === 'KeyR') startReload(me);
+  const m = /^Digit([1-6])$/.exec(e.code); if (m) select(me, +m[1] - 1);
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
+cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+cv.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; });
+addEventListener('mouseup', () => { mouse.down = false; });
+cv.addEventListener('wheel', e => { if (state === 'play' && me.alive) select(me, (me.cur + (e.deltaY > 0 ? 1 : SLOTS - 1)) % SLOTS); e.preventDefault(); }, { passive: false });
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+function touchOn() { if (!isTouch) { isTouch = true; $('touch').hidden = false; } }
+cv.addEventListener('touchstart', e => {
+  e.preventDefault(); touchOn();
+  for (const t of e.changedTouches) {
+    const k = t.clientX < VW / 2 ? 'move' : 'aim';
+    if (!sticks[k]) sticks[k] = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: t.clientX, y: t.clientY };
+  }
+}, { passive: false });
+cv.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) for (const k in sticks) if (sticks[k] && sticks[k].id === t.identifier) { sticks[k].x = t.clientX; sticks[k].y = t.clientY; }
+}, { passive: false });
+const endTouch = e => { for (const t of e.changedTouches) for (const k in sticks) if (sticks[k] && sticks[k].id === t.identifier) sticks[k] = null; };
+cv.addEventListener('touchend', endTouch); cv.addEventListener('touchcancel', endTouch);
+const tb = (id, fn) => $(id).addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'play' && me.alive) fn(); });
+tb('tPick', () => interact(me)); tb('tReload', () => startReload(me));
+function stickVec(s) { if (!s) return null; const dx = s.x - s.ox, dy = s.y - s.oy, m = Math.hypot(dx, dy), mag = Math.min(1, m / 60); if (m < 1) return { x: 0, y: 0, m: 0, a: 0 }; return { x: dx / m * mag, y: dy / m * mag, m: mag, a: Math.atan2(dy, dx) }; }
+
+$('playBtn').onclick = startSolo;
+$('againBtn').onclick = () => { if (!mp) startSolo(); else if (amHost()) hostStart(); };
+$('menuBtn').onclick = toMenu;
+$('mpBtn').onclick = enterLobby;
+$('lobbyBack').onclick = toMenu;
+$('lobbyStart').onclick = () => { if (amHost()) hostStart(); };
+
+// ---------- inventory & actions ----------
+function select(p, i) { if (i < 0 || i >= SLOTS || p.cur === i) return; p.cur = i; p.reloadT = 0; p.useT = 0; p.useK = null; p.cool = p.bot ? Math.max(p.cool, .15) : 0; }
+// move an item between slots 2-6 (fists stay in slot 1)
+function moveSlot(p, a, b) {
+  if (a === b || a < 1 || b < 1 || a >= SLOTS || b >= SLOTS) return;
+  const t = p.inv[a]; p.inv[a] = p.inv[b]; p.inv[b] = t;
+  if (p.cur === a) p.cur = b; else if (p.cur === b) p.cur = a;
+  p.reloadT = 0; p.useT = 0; p.useK = null;
+}
+function startReload(p) { const w = p.inv[p.cur]; if (!w || w.k !== 'gun' || p.reloadT > 0 || w.ammo >= GUNS[w.t].mag) return; p.reloadT = GUNS[w.t].reload; }
+function startUse(p) {
+  const s = p.inv[p.cur]; if (!s || p.useT > 0) return;
+  if (s.k === 'med' && p.hp >= 100) return;
+  if (s.k === 'shield' && p.sh >= 100) return;
+  p.useK = s.k; p.useT = 2;
+}
+// put an item into the first fitting slot; returns true when fully stored
+function addItem(p, it) {
+  if (it.k !== 'gun') for (let i = 1; i < SLOTS; i++) { const s = p.inv[i]; if (s && s.k === it.k && s.n < STACK) { const a = Math.min(STACK - s.n, it.n); s.n += a; it.n -= a; if (it.n <= 0) return true; } }
+  for (let i = 1; i < SLOTS; i++) if (!p.inv[i]) { p.inv[i] = it; return true; }
+  return false;
+}
+function canTake(p, it) {
+  for (let i = 1; i < SLOTS; i++) { const s = p.inv[i]; if (!s) return true; if (it.k !== 'gun' && s.k === it.k && s.n < STACK) return true; }
+  return false;
+}
+function worstSlot(p) { let w = -1, wv = 99; for (let i = 1; i < SLOTS; i++) { const v = itemVal(p.inv[i]); if (v < wv) { wv = v; w = i; } } return w; }
+function pickup(p, l) {
+  const idx = loot.indexOf(l); if (idx < 0) return; loot.splice(idx, 1);
+  const wasEmpty = !p.inv[p.cur] || p.cur === 0;
+  if (addItem(p, l.item)) {
+    if (!p.bot && l.item.k === 'gun' && wasEmpty && p.cur === 0) { const i = p.inv.indexOf(l.item); if (i > 0) select(p, i); }
+    return;
+  }
+  // full: swap with the held slot (or a bot's weakest one)
+  const slot = p.bot ? worstSlot(p) : (p.cur > 0 ? p.cur : -1);
+  if (slot < 1) { loot.push(l); return; }
+  const old = p.inv[slot]; p.inv[slot] = l.item; p.reloadT = 0; p.useT = 0;
+  if (old) dropItem(p.x + rnd(-25, 25), p.y + rnd(-25, 25), old);
+}
+function nearestLoot(p, maxD) { let b = null, bd = maxD; for (const l of loot) { const d = Math.hypot(l.x - p.x, l.y - p.y); if (d < bd) { bd = d; b = l; } } return b; }
+function nearestCrate(p, extra) { let b = null, bd = 1e9; for (const o of obs) if (o.k === 'crate') { const d = Math.hypot(o.x - p.x, o.y - p.y) - o.r - p.r; if (d < extra && d < bd) { bd = d; b = o; } } return b; }
+function openCrate(o) {
+  const i = obs.indexOf(o); if (i < 0) return; obs.splice(i, 1);
+  dropRandom(o.x, o.y, .14);
+  if (Math.random() < .55) dropRandom(o.x + rnd(-24, 24), o.y + rnd(-24, 24), 0);
+  for (let k = 0; k < 12; k++) parts.push({ x: o.x, y: o.y, vx: rnd(-220, 220), vy: rnd(-220, 220), t: rnd(.3, .6), k: 'bit', c: '#b37a3c' });
+}
+function interact(p) {
+  const c = nearestCrate(p, 30), l = nearestLoot(p, 70);
+  const cd = c ? Math.hypot(c.x - p.x, c.y - p.y) - c.r : 1e9, ld = l ? Math.hypot(l.x - p.x, l.y - p.y) : 1e9;
+  if (l && ld <= cd) pickup(p, l); else if (c) openCrate(c);
+}
+
+function act(p) {
+  const s = p.inv[p.cur];
+  if (!s) return;
+  if (s.k === 'fist') return swing(p);
+  if (s.k === 'med' || s.k === 'shield') return startUse(p);
+  fire(p);
+}
+function swing(p) {
+  if (p.cool > 0) return;
+  p.cool = FIST.rate; p.swingT = .18; p.side ^= 1;
+  punchFrom(p, p.x, p.y, p.ang);
+  pushShot(p, 'f', 0);
+}
+function punchFrom(p, x, y, ang) {
+  for (const q of entities()) {
+    if (!q.alive || q === p || !owned(q)) continue;
+    const d = Math.hypot(q.x - x, q.y - y);
+    if (d < p.r + q.r + FIST.reach && Math.abs(angDiff(ang, Math.atan2(q.y - y, q.x - x))) < .95) hurt(q, FIST.dmg, p);
+  }
+}
+function fire(p) {
+  const w = p.inv[p.cur]; if (!w || w.k !== 'gun' || p.reloadT > 0 || p.cool > 0) return;
+  if (w.ammo <= 0) { startReload(p); return; }
+  p.cool = GUNS[w.t].rate; w.ammo--;
+  spawnShot(p, p.x, p.y, p.ang, w.t, w.r);
+  pushShot(p, w.t, w.r);
+  if (w.ammo <= 0) startReload(p);
+}
+function spawnShot(p, x, y, ang, t, r) {
+  const g = GUNS[t], m = RAR[r].m; p.recoil = 1;
+  const mx = x + Math.cos(ang) * (p.r + g.len), my = y + Math.sin(ang) * (p.r + g.len);
+  for (let i = 0; i < g.pel; i++) {
+    const a = ang + (Math.random() - .5) * g.spread * 2 * (p.bot ? 1.25 : 1), s = g.spd * rnd(.92, 1.05);
+    bullets.push({ x: mx, y: my, vx: Math.cos(a) * s, vy: Math.sin(a) * s, dmg: g.dmg * m, own: p, d: 0, max: g.range, c: RAR[r].c, sniper: t === 'bolt' });
+  }
+  parts.push({ x: mx, y: my, t: .06, k: 'flash' });
+}
+
+function hurt(q, dmg, by) {
+  if (!q.alive) return;
+  let d = dmg;
+  if (q.sh > 0) { const a = Math.min(q.sh, d); q.sh -= a; d -= a; }
+  q.hp -= d; q.hitT = .12;
+  if (q.useT > 0) { q.useT = 0; q.useK = null; }
+  if (by === me) { dmgDealt += dmg; floats.push({ x: q.x + rnd(-10, 10), y: q.y - 30, t: .8, v: Math.round(dmg), sh: q.sh > 0 }); }
+  if (q.hp <= 0) kill(q, by);
+}
+function kill(q, by) {
+  q.alive = false; q.hp = 0;
+  for (let i = 1; i < SLOTS; i++) { const it = q.inv[i]; if (!it) continue; if (it.k === 'gun') it.ammo = GUNS[it.t].mag; dropItem(q.x + rnd(-35, 35), q.y + rnd(-35, 35), it); }
+  for (let i = 0; i < 14; i++) parts.push({ x: q.x, y: q.y, vx: rnd(-180, 180), vy: rnd(-180, 180), t: rnd(.3, .6), k: 'bit', c: `hsl(${q.hue} 45% 62%)` });
+  q.killer = by ? codeOf(by) : null;
+  if (by && !by.remote) by.kills++;
+  addFeed(by ? `${by.name} eliminated ${q.name}` : `${q.name} was lost to the storm`, by === me || q === me);
+  if (q === me) { killedBy = by ? by.name : 'the storm'; endGame(false); }
+}
+
+function addFeed(txt, mine) {
+  feed.unshift({ txt, me: mine, t: 6 });
+  if (feed.length > 5) feed.length = 5;
+  renderFeed();
+}
+function endGame(win) {
+  state = 'over';
+  const alive = aliveCount(), total = entities().length;
+  $('overTitle').textContent = win ? 'Victory royale' : 'Eliminated';
+  $('overTitle').style.color = win ? 'var(--accent)' : 'var(--paper)';
+  $('overPlace').innerHTML = `#${win ? 1 : alive + 1}<small> / ${total}</small>`;
+  const host = amHost();
+  $('againBtn').hidden = mp && !host;
+  $('againBtn').textContent = mp ? 'Start new match' : 'Play again';
+  $('overNote').hidden = !mp;
+  $('overNote').textContent = host ? 'Starting a new match pulls everyone in the lobby into it.' : 'You join the next match as soon as the host starts it.';
+  $('overBy').textContent = win ? 'You outlasted everyone on the island.' : `Taken out by ${killedBy}.`;
+  $('oK').textContent = me.kills; $('oD').textContent = Math.round(dmgDealt);
+  $('oT').textContent = fmt(gameT);
+  setTimeout(() => { if (state === 'over') $('over').hidden = false; }, 900);
+}
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// ---------- collision ----------
+function segHit(x1, y1, x2, y2, cx, cy, r) {
+  const dx = x2 - x1, dy = y2 - y1, fx = x1 - cx, fy = y1 - cy;
+  const a = dx * dx + dy * dy, b = 2 * (fx * dx + fy * dy), c = fx * fx + fy * fy - r * r;
+  if (c < 0) return 0; if (a === 0) return -1;
+  const disc = b * b - 4 * a * c; if (disc < 0) return -1;
+  const t = (-b - Math.sqrt(disc)) / (2 * a);
+  return t >= 0 && t <= 1 ? t : -1;
+}
+function los(x1, y1, x2, y2) { for (const o of obs) if (segHit(x1, y1, x2, y2, o.x, o.y, o.r) >= 0) return false; return true; }
+function collide(p) {
+  for (const o of obs) {
+    const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy), m = o.r + p.r;
+    if (d < m && d > 0) { p.x = o.x + dx / d * m; p.y = o.y + dy / d * m; }
+  }
+  p.x = clamp(p.x, p.r, W - p.r); p.y = clamp(p.y, p.r, W - p.r);
+}
+const angDiff = (a, b) => { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+
+// ---------- bots ----------
+const hasGun = p => p.inv.some(s => s && s.k === 'gun');
+function slotOf(p, k) { for (let i = 1; i < SLOTS; i++) if (p.inv[i] && p.inv[i].k === k) return i; return -1; }
+function bestGunSlot(p, d) {
+  let best = 0, bv = 0;
+  for (let i = 1; i < SLOTS; i++) {
+    const g = p.inv[i]; if (!g || g.k !== 'gun') continue;
+    const G = GUNS[g.t];
+    let v = G.v * RAR[g.r].m * (d < G.range * .9 ? 1 : .2) * (g.ammo > 0 ? 1 : .4);
+    if (g.t === 'pump' && d > 300) v *= .3;
+    if (g.t === 'bolt' && d < 200) v *= .5;
+    if (v > bv) { bv = v; best = i; }
+  }
+  return best;
+}
+function botThink(p) {
+  const ai = p.ai, z = zone;
+  let best = null, bd = 760;
+  for (const q of entities()) {
+    if (q === p || !q.alive) continue;
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    if (d < bd && !(q.under && d > 260) && los(p.x, p.y, q.x, q.y)) { bd = d; best = q; }
+  }
+  if (best !== ai.target) { ai.target = best; ai.react = .3 + Math.random() * .35; }
+  if (Math.random() < .3) ai.strafe = -ai.strafe;
+  ai.err = (Math.random() - .5) * .2;
+  ai.crate = null; ai.goal = null;
+  if (best) {
+    if (p.useT <= 0) { const s = bestGunSlot(p, bd); if (s !== p.cur && p.cool <= 0) select(p, s); }
+    return;
+  }
+  // heal when nobody is around
+  if (p.useT <= 0) {
+    const ms = slotOf(p, 'med'), ss = slotOf(p, 'shield');
+    if (p.hp < 65 && ms > 0) { select(p, ms); startUse(p); return; }
+    if (p.sh < 50 && ss > 0) { select(p, ss); startUse(p); return; }
+  } else return;
+  const outT = Math.hypot(p.x - z.tx, p.y - z.ty) > z.tr * .85;
+  const outC = Math.hypot(p.x - z.cx, p.y - z.cy) > z.r * .9;
+  // loot on the ground
+  let goal = null, gd = 650;
+  const worst = worstSlot(p), wv = itemVal(p.inv[worst]);
+  for (const l of loot) {
+    const d = Math.hypot(l.x - p.x, l.y - p.y); if (d >= gd) continue;
+    const it = l.item;
+    const want = canTake(p, it) || (it.k === 'gun' && itemVal(it) > wv + .05);
+    if (want) { gd = d; goal = l; }
+  }
+  if (goal && !outC) { ai.tx = goal.x; ai.ty = goal.y; ai.goal = goal; return; }
+  if (outT && (z.state === 'shrink' || z.t < 18 || outC)) { const a = rnd(0, TAU), r = rnd(0, z.tr * .5); ai.tx = z.tx + Math.cos(a) * r; ai.ty = z.ty + Math.sin(a) * r; return; }
+  // crack a crate if the kit is weak
+  if (!hasGun(p) || wv < 2.4) {
+    let c = null, cd = 700;
+    for (const o of obs) if (o.k === 'crate') { const d = Math.hypot(o.x - p.x, o.y - p.y); if (d < cd) { cd = d; c = o; } }
+    if (c) { ai.crate = c; ai.tx = c.x; ai.ty = c.y; return; }
+  }
+  if (p.cur === 0 || !p.inv[p.cur] || p.inv[p.cur].k !== 'gun') { const s = bestGunSlot(p, 400); if (s) select(p, s); }
+  ai.wanderT -= .25;
+  if (ai.wanderT <= 0) {
+    ai.wanderT = rnd(3, 7);
+    const cx = z.state === 'shrink' ? z.tx : z.cx, cy = z.state === 'shrink' ? z.ty : z.cy, rr = Math.min(z.r, z.tr || z.r) * .7;
+    const a = rnd(0, TAU), r = rnd(0, rr); ai.tx = clamp(cx + Math.cos(a) * r, 80, W - 80); ai.ty = clamp(cy + Math.sin(a) * r, 80, W - 80);
+  }
+}
+
+function botMove(p, dt) {
+  const ai = p.ai; let mx = 0, my = 0, want = null;
+  if (ai.target && !ai.target.alive) ai.target = null;
+  const w = p.inv[p.cur];
+  if (ai.target) {
+    const q = ai.target, d = Math.hypot(q.x - p.x, q.y - p.y), a = Math.atan2(q.y - p.y, q.x - p.x);
+    const gun = w && w.k === 'gun' ? w : null, G = gun ? GUNS[gun.t] : null;
+    const ideal = !gun ? 20 : gun.t === 'pump' ? 140 : gun.t === 'bolt' ? 600 : 330;
+    const fwd = d > ideal + 40 ? 1 : d < ideal - 60 ? -.7 : 0;
+    const str = gun ? .75 : .25;
+    mx = Math.cos(a) * fwd + Math.cos(a + Math.PI / 2) * ai.strafe * str;
+    my = Math.sin(a) * fwd + Math.sin(a + Math.PI / 2) * ai.strafe * str;
+    const lead = G ? d / G.spd * .5 : 0;
+    want = Math.atan2(q.y + (q.vy || 0) * lead - p.y, q.x + (q.vx || 0) * lead - p.x) + (gun ? ai.err : 0);
+    ai.react -= dt;
+    if (ai.react <= 0 && Math.abs(angDiff(p.ang, want)) < .25) {
+      if (gun && d < G.range) fire(p);
+      else if (!gun && d < p.r + q.r + FIST.reach) swing(p);
+    }
+  } else {
+    const dx = ai.tx - p.x, dy = ai.ty - p.y, d = Math.hypot(dx, dy);
+    if (ai.crate && !obs.includes(ai.crate)) ai.crate = null;
+    if (d > 20) { mx = dx / d; my = dy / d; want = Math.atan2(dy, dx); }
+    if (ai.crate && d < ai.crate.r + p.r + 26) { openCrate(ai.crate); ai.crate = null; ai.t = 0; }
+    if (ai.goal && d < 40) { pickup(p, ai.goal); ai.goal = null; ai.t = 0; }
+    if (w && w.k === 'gun' && w.ammo < GUNS[w.t].mag * .5) startReload(p);
+  }
+  // storm overrides everything when outside the live circle
+  const zd = Math.hypot(p.x - zone.cx, p.y - zone.cy);
+  if (zd > zone.r - 40) { const a = Math.atan2(zone.cy - p.y, zone.cx - p.x); mx = mx * .3 + Math.cos(a); my = my * .3 + Math.sin(a); }
+  if (ai.unstuck > 0) { ai.unstuck -= dt; mx = ai.ux; my = ai.uy; }
+  const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
+  if (want !== null) p.ang += clamp(angDiff(p.ang, want), -9 * dt, 9 * dt);
+  return { mx, my };
+}
+
+// ---------- update ----------
+function update(dt) {
+  gameT += dt;
+  zone = zoneAt(gameT);
+  const P = zone;
+  for (const g of ghosts.values()) {
+    const k = Math.min(1, dt * 14);
+    g.x += (g.tx - g.x) * k; g.y += (g.ty - g.y) * k;
+    g.recoil = Math.max(0, g.recoil - dt * 8); g.swingT -= dt; g.hitT -= dt;
+    g.under = trees.some(t => Math.hypot(t.x - g.x, t.y - g.y) < t.r * .75);
+  }
+
+  for (const p of players) {
+    if (!p.alive) continue;
+    p.cool -= dt; p.recoil = Math.max(0, p.recoil - dt * 8); p.hitT -= dt; p.swingT -= dt;
+    if (p.reloadT > 0) { p.reloadT -= dt; if (p.reloadT <= 0) { const w = p.inv[p.cur]; if (w && w.k === 'gun') w.ammo = GUNS[w.t].mag; p.reloadT = 0; } }
+    if (p.useT > 0) {
+      p.useT -= dt;
+      if (p.useT <= 0) {
+        const s = p.inv[p.cur];
+        if (s && s.k === p.useK) {
+          if (s.k === 'med') p.hp = Math.min(100, p.hp + 50);
+          if (s.k === 'shield') p.sh = Math.min(100, p.sh + 50);
+          s.n--; if (s.n <= 0) p.inv[p.cur] = null;
+        }
+        p.useK = null; p.useT = 0;
+      }
+    }
+    let mx = 0, my = 0;
+    if (p.bot) {
+      p.ai.t -= dt; if (p.ai.t <= 0) { p.ai.t = .25; botThink(p); }
+      ({ mx, my } = botMove(p, dt));
+    } else {
+      if (state !== 'play') continue;
+      mx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+      my = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+      const ms = stickVec(sticks.move); if (ms && ms.m > .1) { mx = ms.x; my = ms.y; }
+      const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
+      const as = stickVec(sticks.aim);
+      if (as && as.m > .2) { p.ang = as.a; if (as.m > .55) act(p); }
+      else if (!isTouch) { const wx = (mouse.x - VW / 2) / SC + cam.x, wy = (mouse.y - VH / 2) / SC + cam.y; p.ang = Math.atan2(wy - p.y, wx - p.x); if (mouse.down) act(p); }
+    }
+    const held = p.inv[p.cur];
+    const spd = 255 * (p.useT > 0 ? .45 : 1) * (held && held.k === 'gun' && held.t === 'bolt' ? .92 : held && held.k === 'fist' ? 1.06 : 1);
+    const ox = p.x, oy = p.y;
+    p.x += mx * spd * dt; p.y += my * spd * dt;
+    collide(p);
+    p.vx = (p.x - ox) / dt; p.vy = (p.y - oy) / dt;
+    if (p.bot) {
+      const ai = p.ai;
+      if (Math.hypot(mx, my) > .5 && Math.hypot(p.x - ox, p.y - oy) < spd * dt * .25) ai.stuck += dt; else ai.stuck = Math.max(0, ai.stuck - dt);
+      if (ai.stuck > .5 && ai.unstuck <= 0) { const a = Math.atan2(my, mx) + (Math.random() < .5 ? 1 : -1) * Math.PI / 2; ai.ux = Math.cos(a); ai.uy = Math.sin(a); ai.unstuck = .6; ai.stuck = 0; ai.wanderT = 0; }
+    }
+    if (Math.hypot(p.x - zone.cx, p.y - zone.cy) > zone.r) {
+      p.hp -= P.d * dt; p.hitT = .05;
+      if (p.hp <= 0) kill(p, null);
+    }
+    p.under = trees.some(t => Math.hypot(t.x - p.x, t.y - p.y) < t.r * .75);
+  }
+  const ents = entities();
+  for (let i = 0; i < ents.length; i++) for (let j = i + 1; j < ents.length; j++) {
+    const a = ents[i], b = ents[j]; if (!a.alive || !b.alive || (a.remote && b.remote)) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.r + b.r;
+    if (d < m && d > 0) {
+      const push = (m - d) / (a.remote || b.remote ? 1 : 2);
+      if (!a.remote) { a.x -= dx / d * push; a.y -= dy / d * push; }
+      if (!b.remote) { b.x += dx / d * push; b.y += dy / d * push; }
+    }
+  }
+
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt;
+    let hitT = 2, hitP = null, hitO = null;
+    for (const q of ents) { if (!q.alive || q === b.own) continue; const t = segHit(b.x, b.y, nx, ny, q.x, q.y, q.r); if (t >= 0 && t < hitT) { hitT = t; hitP = q; hitO = null; } }
+    for (const o of obs) { const t = segHit(b.x, b.y, nx, ny, o.x, o.y, o.r); if (t >= 0 && t < hitT) { hitT = t; hitO = o; hitP = null; } }
+    if (hitP || hitO) {
+      const hx = b.x + (nx - b.x) * hitT, hy = b.y + (ny - b.y) * hitT;
+      for (let k = 0; k < 4; k++) parts.push({ x: hx, y: hy, vx: rnd(-140, 140), vy: rnd(-140, 140), t: rnd(.1, .25), k: 'bit', c: hitP ? '#e9604f' : hitO.k === 'crate' ? '#c48a4a' : '#9a9a8c' });
+      if (hitP && owned(hitP)) hurt(hitP, b.dmg * (b.d > b.max * .7 ? .75 : 1), b.own);
+      else if (hitP) { hitP.hitT = .1; if (b.own === me) floats.push({ x: hitP.x + rnd(-10, 10), y: hitP.y - 30, t: .8, v: Math.round(b.dmg), sh: hitP.sh > 0 }); }
+      else if (hitO.k === 'crate') hitO.shake = .1;
+      bullets.splice(i, 1); continue;
+    }
+    b.d += Math.hypot(nx - b.x, ny - b.y); b.x = nx; b.y = ny;
+    if (b.d > b.max || b.x < 0 || b.y < 0 || b.x > W || b.y > W) bullets.splice(i, 1);
+  }
+  for (const o of obs) if (o.shake > 0) o.shake -= dt;
+  for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.t -= dt; if (q.vx) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= .9; q.vy *= .9; } if (q.t <= 0) parts.splice(i, 1); }
+  for (let i = floats.length - 1; i >= 0; i--) { floats[i].t -= dt; floats[i].y -= 40 * dt; if (floats[i].t <= 0) floats.splice(i, 1); }
+  let feedChanged = false;
+  for (let i = feed.length - 1; i >= 0; i--) { feed[i].t -= dt; if (feed[i].t <= 0) { feed.splice(i, 1); feedChanged = true; } }
+  if (feedChanged) renderFeed();
+
+  if (state === 'play' && me.alive && gameT > 3 && (!mp || amHost() || hostSeen) && aliveCount() === 1) endGame(true);
+}
+
+// ---------- render ----------
+function drawItemIcon(it, s) {
+  if (it.k === 'gun') {
+    drawGun(ctx, it.t, RAR[it.r].c);
+  } else if (it.k === 'med') {
+    ctx.fillStyle = '#e9604f'; ctx.strokeStyle = '#f4f1e4'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect(-13, -11, 26, 22, 5); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f4f1e4'; ctx.fillRect(-2.5, -7, 5, 14); ctx.fillRect(-7, -2.5, 14, 5);
+  } else {
+    ctx.fillStyle = '#58b8ff'; ctx.strokeStyle = '#f4f1e4'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 2, 11, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f4f1e4'; ctx.fillRect(-3, -15, 6, 8);
+  }
+}
+
+function render() {
+  const t = performance.now() / 1000;
+  if (me) { cam.x += (me.x - cam.x) * .18; cam.y += (me.y - cam.y) * .18; }
+  // zoom out while a bolt sniper is in hand
+  const heldNow = me && me.alive && me.inv[me.cur];
+  const zTarget = heldNow && heldNow.k === 'gun' && heldNow.t === 'bolt' ? .66 : 1;
+  ZM += (zTarget - ZM) * .1; SC = BASE * ZM;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#3b4e2c'; ctx.fillRect(0, 0, VW, VH);
+  ctx.setTransform(DPR * SC, 0, 0, DPR * SC, DPR * (VW / 2 - cam.x * SC), DPR * (VH / 2 - cam.y * SC));
+  const vw = VW / SC, vh = VH / SC, x0 = cam.x - vw / 2, y0 = cam.y - vh / 2;
+
+  ctx.fillStyle = '#5b7845'; ctx.fillRect(0, 0, W, W);
+  ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let gx = Math.floor(x0 / 120) * 120; gx < x0 + vw; gx += 120) { if (gx < 0 || gx > W) continue; ctx.moveTo(gx, Math.max(0, y0)); ctx.lineTo(gx, Math.min(W, y0 + vh)); }
+  for (let gy = Math.floor(y0 / 120) * 120; gy < y0 + vh; gy += 120) { if (gy < 0 || gy > W) continue; ctx.moveTo(Math.max(0, x0), gy); ctx.lineTo(Math.min(W, x0 + vw), gy); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(20,24,18,.6)'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, W, W);
+  const vis = (x, y, r) => x + r > x0 && x - r < x0 + vw && y + r > y0 && y - r < y0 + vh;
+
+  for (const l of loot) {
+    if (!vis(l.x, l.y, 30)) continue;
+    const by = Math.sin(t * 3 + l.bob) * 2;
+    ctx.save(); ctx.translate(l.x, l.y + by);
+    if (l.item.k === 'gun') {
+      const r = l.item.r, c = RAR[r].c;
+      if (r >= 2) { ctx.globalAlpha = .28 + Math.sin(t * 4 + l.bob) * .1; ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, 54, 32, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.roundRect(-42, -19, 84, 42, 12); ctx.fill();
+      ctx.fillStyle = 'rgba(236,232,214,.88)'; ctx.strokeStyle = c; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.roundRect(-42, -22, 84, 42, 12); ctx.fill(); ctx.stroke();
+      ctx.translate(0, -1); ctx.scale(1.05, 1.05); drawGun(ctx, l.item.t, c);
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(0, 4, 22, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(20,22,18,.7)'; ctx.strokeStyle = itemColor(l.item); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 20, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.scale(.85, .85); drawItemIcon(l.item);
+    }
+    ctx.restore();
+    if (me && me.alive && Math.hypot(l.x - me.x, l.y - me.y) < 420) {
+      ctx.font = '800 14px Rubik, system-ui, sans-serif'; ctx.textAlign = 'center';
+      const lbl = l.item.k === 'gun' ? `${RAR[l.item.r].n} ${GUNS[l.item.t].name}` : itemName(l.item);
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(14,16,14,.85)'; ctx.strokeText(lbl, l.x, l.y + by + 38);
+      ctx.fillStyle = itemColor(l.item); ctx.fillText(lbl, l.x, l.y + by + 38);
+    }
+  }
+
+  const near = me && me.alive ? nearestCrate(me, 30) : null;
+  for (const o of obs) {
+    if (!vis(o.x, o.y, o.r)) continue;
+    if (o.k === 'rock') {
+      ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.arc(o.x + 5, o.y + 7, o.r, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#868a7c'; ctx.strokeStyle = '#4c5048'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#9fa394'; ctx.beginPath(); ctx.arc(o.x - o.r * .3, o.y - o.r * .3, o.r * .4, 0, TAU); ctx.fill();
+    } else {
+      const sh = o.shake > 0 ? rnd(-2, 2) : 0, s = o.r * 1.6;
+      ctx.save(); ctx.translate(o.x + sh, o.y);
+      ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(-s / 2 + 5, -s / 2 + 7, s, s);
+      ctx.fillStyle = '#a8703a'; ctx.strokeStyle = o === near ? '#ffd9a0' : '#5e3c1b'; ctx.lineWidth = 4; ctx.fillRect(-s / 2, -s / 2, s, s); ctx.strokeRect(-s / 2, -s / 2, s, s);
+      ctx.strokeStyle = '#5e3c1b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-s / 2, -s / 2); ctx.lineTo(s / 2, s / 2); ctx.moveTo(s / 2, -s / 2); ctx.lineTo(-s / 2, s / 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  ctx.lineCap = 'round';
+  for (const b of bullets) {
+    const sp = Math.hypot(b.vx, b.vy), L = b.sniper ? 60 : 26;
+    ctx.strokeStyle = b.c; ctx.lineWidth = b.sniper ? 4 : 3;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x - b.vx / sp * L, b.y - b.vy / sp * L); ctx.stroke();
+  }
+
+  for (const p of entities()) if (p.alive && vis(p.x, p.y, 80)) drawP(p);
+  ctx.textAlign = 'center'; ctx.font = '800 14px Rubik, system-ui, sans-serif';
+  for (const g of ghosts.values()) if (g.alive && !g.bot && vis(g.x, g.y, 80)) {
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(14,16,14,.85)'; ctx.strokeText(g.name, g.x, g.y - g.r - 26);
+    ctx.fillStyle = '#ffe2c4'; ctx.fillText(g.name, g.x, g.y - g.r - 26);
+  }
+
+  for (const q of parts) {
+    if (q.k === 'flash') { ctx.fillStyle = 'rgba(255,220,140,.9)'; ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, TAU); ctx.fill(); }
+    else { ctx.globalAlpha = clamp(q.t * 3, 0, 1); ctx.fillStyle = q.c; ctx.fillRect(q.x - 3, q.y - 3, 6, 6); ctx.globalAlpha = 1; }
+  }
+
+  for (const tr of trees) {
+    if (!vis(tr.x, tr.y, tr.r)) continue;
+    const meUnder = me && me.alive && Math.hypot(tr.x - me.x, tr.y - me.y) < tr.r * .8;
+    tr.a += ((meUnder ? .35 : .95) - tr.a) * .15;
+    ctx.globalAlpha = tr.a;
+    ctx.fillStyle = '#2f5a2a'; ctx.beginPath(); ctx.arc(tr.x, tr.y, tr.r, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#3d7034'; ctx.beginPath(); ctx.arc(tr.x - tr.r * .2, tr.y - tr.r * .2, tr.r * .65, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#4a8240'; ctx.beginPath(); ctx.arc(tr.x - tr.r * .35, tr.y - tr.r * .35, tr.r * .3, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  if (zone) {
+    ctx.beginPath(); ctx.rect(x0 - 10, y0 - 10, vw + 20, vh + 20); ctx.arc(zone.cx, zone.cy, Math.max(0, zone.r), 0, TAU);
+    ctx.fillStyle = 'rgba(88,52,170,.42)'; ctx.fill('evenodd');
+    ctx.strokeStyle = 'rgba(200,170,255,.85)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(zone.cx, zone.cy, Math.max(0, zone.r), 0, TAU); ctx.stroke();
+    if (zone.tr < zone.r - 2) { ctx.setLineDash([24, 18]); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(zone.tx, zone.ty, zone.tr, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+  }
+
+  ctx.textAlign = 'center'; ctx.font = '800 20px Rubik, system-ui, sans-serif';
+  for (const f of floats) { ctx.globalAlpha = clamp(f.t * 2, 0, 1); ctx.fillStyle = f.sh ? '#8fd0ff' : '#ffe29a'; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 4; ctx.strokeText(f.v, f.x, f.y); ctx.fillText(f.v, f.x, f.y); }
+  ctx.globalAlpha = 1;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (me && me.alive && zone && Math.hypot(me.x - zone.cx, me.y - zone.cy) > zone.r) { ctx.fillStyle = 'rgba(110,60,200,.18)'; ctx.fillRect(0, 0, VW, VH); }
+  for (const k in sticks) {
+    const s = sticks[k]; if (!s) continue;
+    ctx.strokeStyle = 'rgba(236,232,214,.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.ox, s.oy, 60, 0, TAU); ctx.stroke();
+    const v = stickVec(s); ctx.fillStyle = k === 'aim' && v.m > .55 ? 'rgba(255,138,61,.8)' : 'rgba(236,232,214,.6)';
+    ctx.beginPath(); ctx.arc(s.ox + v.x * 60, s.oy + v.y * 60, 24, 0, TAU); ctx.fill();
+  }
+  if (state === 'play' || state === 'over') hud();
+}
+
+function drawP(p) {
+  const held = p.inv[p.cur], skin = `hsl(${p.hue} 42% 62%)`, dark = `hsl(${p.hue} 35% 30%)`;
+  ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.arc(p.x + 4, p.y + 6, p.r, 0, TAU); ctx.fill();
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.ang);
+  ctx.strokeStyle = dark; ctx.lineWidth = 3;
+  if (held && held.k === 'gun') {
+    const G = GUNS[held.t], rc = p.recoil * 5;
+    ctx.fillStyle = GUN_TOP[held.t]; ctx.strokeStyle = EDGE; ctx.lineWidth = 2; ctx.fillRect(p.r - 8 - rc, -5, G.len + 10, 10); ctx.strokeRect(p.r - 8 - rc, -5, G.len + 10, 10); if (held.t === 'bolt') { ctx.fillStyle = DARK; ctx.fillRect(p.r + 2 - rc, -3, 16, 6); } if (held.t === 'pump') { ctx.fillStyle = '#8a4e25'; ctx.fillRect(p.r + 14 - rc, -6, 10, 12); } ctx.strokeStyle = dark; ctx.lineWidth = 3;
+    ctx.fillStyle = RAR[held.r].c; ctx.fillRect(p.r - 8 - rc, -5, 7, 10);
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.arc(p.r - 4 - rc, -9, 7, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.r + 8 - rc, 6, 7, 0, TAU); ctx.fill(); ctx.stroke();
+  } else if (held && (held.k === 'med' || held.k === 'shield')) {
+    ctx.save(); ctx.translate(p.r + 10, 0); ctx.rotate(-p.ang + p.ang); ctx.scale(.7, .7); drawItemIcon(held); ctx.restore();
+    ctx.fillStyle = skin; ctx.strokeStyle = dark; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(p.r + 2, -12, 7, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.r + 2, 12, 7, 0, TAU); ctx.fill(); ctx.stroke();
+  } else {
+    const k = p.swingT > 0 ? Math.sin((1 - p.swingT / .18) * Math.PI) * 16 : 0;
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.arc(p.r - 2 + (p.side ? k : 0), -14, 8, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.r - 2 + (p.side ? 0 : k), 14, 8, 0, TAU); ctx.fill(); ctx.stroke();
+  }
+  ctx.fillStyle = p.hitT > 0 ? '#fff' : skin; ctx.strokeStyle = dark; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(0, 0, p.r, 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  if (p === me) { ctx.strokeStyle = 'rgba(255,138,61,.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 7, 0, TAU); ctx.stroke(); }
+  if (p.useT > 0) { ctx.strokeStyle = p.useK === 'med' ? '#e9604f' : '#58b8ff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 12, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - p.useT / 2)); ctx.stroke(); }
+  if (p !== me && (p.hp < 100 || p.sh > 0)) {
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(p.x - 24, p.y - p.r - 16, 48, 6);
+    ctx.fillStyle = '#6ad26a'; ctx.fillRect(p.x - 24, p.y - p.r - 16, 48 * Math.max(0, p.hp) / 100, 6);
+    if (p.sh > 0) { ctx.fillStyle = '#58b8ff'; ctx.fillRect(p.x - 24, p.y - p.r - 21, 48 * p.sh / 100, 4); }
+  }
+}
+
+function buildSlots() {
+  const row = $('slots'); row.innerHTML = '';
+  for (let i = 0; i < SLOTS; i++) {
+    const el = document.createElement('div'); el.className = 'slot'; el.id = 'slot' + i;
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault(); if (state !== 'play' || !me.alive) return;
+      select(me, i);
+      if (i > 0 && me.inv[i]) drag = { from: i, x0: e.clientX, y0: e.clientY, ghost: null, id: e.pointerId };
+    });
+    row.appendChild(el);
+  }
+}
+
+let drag = null;
+function slotAt(x, y) { const el = document.elementFromPoint(x, y); const s = el && el.closest && el.closest('.slot'); return s ? +s.id.slice(4) : -1; }
+addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  if (!drag.ghost && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) {
+    const src = $('slot' + drag.from); const g = src.cloneNode(true); g.id = 'ghost'; g.classList.add('ghost');
+    g.style.width = src.offsetWidth + 'px'; document.body.appendChild(g); drag.ghost = g; src.classList.add('lifted');
+  }
+  if (drag.ghost) {
+    drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px';
+    const over = slotAt(e.clientX, e.clientY);
+    document.querySelectorAll('.slot.drop').forEach(s => s.classList.remove('drop'));
+    if (over > 0 && over !== drag.from) $('slot' + over).classList.add('drop');
+  }
+});
+const endDrag = e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  if (drag.ghost) {
+    drag.ghost.remove();
+    const to = slotAt(e.clientX, e.clientY);
+    if (to > 0 && state === 'play' && me.alive) moveSlot(me, drag.from, to);
+  }
+  document.querySelectorAll('.slot.drop,.slot.lifted').forEach(s => s.classList.remove('drop', 'lifted'));
+  for (let i = 0; i < SLOTS; i++) { const s = $('slot' + i); if (s) s.dataset.k = ''; }
+  drag = null;
+};
+addEventListener('pointerup', endDrag); addEventListener('pointercancel', endDrag);
+
+function hud() {
+  const alive = aliveCount();
+  $('alive').textContent = alive; $('kills').textContent = me.kills;
+  $('hpBar').style.width = Math.max(0, me.hp) + '%'; $('hpTxt').textContent = Math.ceil(Math.max(0, me.hp));
+  $('shBar').style.width = me.sh + '%';
+  for (let i = 0; i < SLOTS; i++) {
+    const el = $('slot' + i); if (!el) continue;
+    const it = me.inv[i], on = me.cur === i;
+    const rl = on && me.reloadT > 0 ? Math.round(me.reloadT * 20) : on && me.useT > 0 ? 'u' + Math.round(me.useT * 20) : '';
+    const key = (it ? `${it.k}${it.t || ''}${it.r ?? ''}${it.ammo ?? ''}${it.n ?? ''}` : 'e') + on + rl;
+    if (el.dataset.k === key) continue; el.dataset.k = key;
+    el.classList.toggle('on', on);
+    if (!it) { el.innerHTML = `<span class="k">${i + 1}</span><span class="a">Empty</span>`; el.style.borderColor = ''; continue; }
+    let name, sub, col, bar = '';
+    if (it.k === 'fist') { name = 'Fists'; sub = 'Melee'; col = 'var(--paper)'; }
+    else if (it.k === 'gun') {
+      const G = GUNS[it.t]; name = G.name; col = RAR[it.r].c;
+      sub = on && me.reloadT > 0 ? 'Reloading…' : `${it.ammo} / ${G.mag}`;
+      if (on && me.reloadT > 0) bar = `<span class="rl" style="width:${(1 - me.reloadT / G.reload) * 100}%"></span>`;
+    } else {
+      name = it.k === 'med' ? 'Medkit' : 'Shield'; col = itemColor(it); sub = `×${it.n}`;
+      if (on && me.useT > 0) { sub = 'Using…'; bar = `<span class="rl" style="width:${(1 - me.useT / 2) * 100}%"></span>`; }
+    }
+    el.innerHTML = `<span class="k">${i + 1}</span>${it.k === 'gun' ? `<img class="ic" alt="" src="${gunIcon(it.t, it.r)}">` : ''}<span class="n" style="color:${col}">${name}</span><span class="a">${sub}</span>${bar}`;
+    el.style.borderColor = on ? (it.k === 'gun' ? RAR[it.r].c : 'var(--paper)') : (it.k === 'gun' ? RAR[it.r].c + '66' : '');
+  }
+  const z = zone, msg = $('stormMsg');
+  let s;
+  if (z.state === 'wait') s = `Storm closes in ${fmt(Math.max(0, z.t))}`;
+  else s = z.t > 0 ? `Storm moving · ${fmt(z.t)}` : 'Final storm';
+  const outside = me.alive && Math.hypot(me.x - z.cx, me.y - z.cy) > z.r;
+  if (outside) s = `You're in the storm · ${z.d} dmg/s`;
+  if (msg.textContent !== s) msg.textContent = s;
+  msg.classList.toggle('warn', outside || z.state === 'shrink');
+  // reload panel
+  const rb = $('reloadBox'), rw = me.inv[me.cur];
+  if (me.alive && me.reloadT > 0 && rw && rw.k === 'gun') {
+    const G = GUNS[rw.t];
+    $('rlSec').textContent = me.reloadT.toFixed(1) + 's';
+    $('rlGun').textContent = `${RAR[rw.r].n} ${G.name} · ${G.mag} rounds`;
+    $('rlBar').style.width = ((1 - me.reloadT / G.reload) * 100) + '%';
+    rb.hidden = false;
+  } else rb.hidden = true;
+  // prompt
+  const pr = $('prompt'), key = isTouch ? 'Tap Open / Pick' : 'E';
+  let txt = '', col = 'var(--paper)';
+  if (me.alive) {
+    const c = nearestCrate(me, 30), l = nearestLoot(me, 70);
+    const cd = c ? Math.hypot(c.x - me.x, c.y - me.y) - c.r : 1e9, ld = l ? Math.hypot(l.x - me.x, l.y - me.y) : 1e9;
+    if (l && ld <= cd) {
+      const full = !canTake(me, l.item);
+      txt = `${key} · Pick up ${itemName(l.item)}${full ? (me.cur > 0 ? ' (swap)' : ' — select a slot to swap') : ''}`; col = itemColor(l.item);
+    } else if (c) txt = `${key} · Open crate`;
+  }
+  if (txt) { if (pr.textContent !== txt) pr.textContent = txt; pr.style.color = col; pr.hidden = false; } else pr.hidden = true;
+  // minimap
+  const M = mini.width, k = M / W;
+  mctx.clearRect(0, 0, M, M);
+  mctx.fillStyle = '#4f6a3c'; mctx.fillRect(0, 0, M, M);
+  mctx.fillStyle = '#7d8174'; for (const o of obs) if (o.k === 'rock') { mctx.beginPath(); mctx.arc(o.x * k, o.y * k, Math.max(1.5, o.r * k), 0, TAU); mctx.fill(); }
+  mctx.beginPath(); mctx.rect(0, 0, M, M); mctx.arc(z.cx * k, z.cy * k, Math.max(0, z.r * k), 0, TAU); mctx.fillStyle = 'rgba(110,70,200,.55)'; mctx.fill('evenodd');
+  mctx.strokeStyle = '#d6c4ff'; mctx.lineWidth = 3; mctx.beginPath(); mctx.arc(z.cx * k, z.cy * k, Math.max(0, z.r * k), 0, TAU); mctx.stroke();
+  if (z.tr < z.r - 2) { mctx.setLineDash([6, 5]); mctx.strokeStyle = '#fff'; mctx.lineWidth = 2; mctx.beginPath(); mctx.arc(z.tx * k, z.ty * k, z.tr * k, 0, TAU); mctx.stroke(); mctx.setLineDash([]); }
+  if (me.alive) {
+    mctx.strokeStyle = 'rgba(255,255,255,.4)'; mctx.lineWidth = 1.5; mctx.strokeRect((cam.x - VW / SC / 2) * k, (cam.y - VH / SC / 2) * k, VW / SC * k, VH / SC * k);
+    mctx.fillStyle = '#ff8a3d'; mctx.beginPath(); mctx.arc(me.x * k, me.y * k, 6, 0, TAU); mctx.fill();
+    mctx.strokeStyle = '#121613'; mctx.lineWidth = 2; mctx.stroke();
+  }
+}
+
+function renderFeed() {
+  $('feed').innerHTML = feed.map(f => `<div class="${f.me ? 'me' : ''}">${f.txt.replace(/[<>&]/g, '')}</div>`).join('');
+}
+
+// ---------- multiplayer ----------
+// Every open page shares a live "room". Each player publishes their own state as presence ~30x a second.
+// One player (the host) also runs the bots and publishes them plus the match clock.
+// Damage is decided by whoever owns the target: you for yourself, the host for bots.
+let room = null, mp = false, netMode = null, myPeer = null, hostPeer = null, match = null, hostSeen = false;
+let peersSnap = [], shotSeq = 0, myShots = [];
+const ghosts = new Map(), seenShots = new Map(), counted = new Set();
+
+const entities = () => ghosts.size ? players.concat([...ghosts.values()]) : players;
+const owned = q => !q.remote;
+const aliveCount = () => entities().filter(e => e.alive).length;
+const amHost = () => mp && hostPeer === myPeer;
+function codeOf(e) { if (!e) return null; if (e === me) return myPeer || 'me'; if (e.bot) return '#' + e.id; return e.peer; }
+function nameOfCode(c) {
+  if (!c) return 'the storm';
+  if (c === myPeer) return me ? me.name : 'you';
+  if (c[0] === '#') return botNames[+c.slice(1)] || 'a bot';
+  const g = ghosts.get(c); return g ? g.name : 'another player';
+}
+function heldCode(p) { const s = p.inv[p.cur]; return !s ? 'n' : s.k === 'fist' ? 'f' : s.k === 'gun' ? s.t + s.r : s.k; }
+function setHeld(g, c) {
+  c = String(c || 'f'); const m = /^(ar|pump|bolt|smg)([0-3])$/.exec(c);
+  const it = m ? { k: 'gun', t: m[1], r: +m[2], ammo: 0 } : c === 'med' ? { k: 'med', n: 1 } : c === 'shield' ? { k: 'shield', n: 1 } : null;
+  g.inv[1] = it; g.cur = it ? 1 : 0;
+}
+function mkGhost(key, bot) {
+  return { remote: true, key, peer: key, bot, id: 0, name: '', r: 22, x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, lt: 0, ang: 0, hp: 100, sh: 0, alive: true,
+    inv: [{ k: 'fist' }, null], cur: 0, hue: 0, recoil: 0, hitT: 0, swingT: 0, side: 0, useT: 0, under: false, kills: 0 };
+}
+const num = (v, d = 0) => typeof v === 'number' && isFinite(v) ? v : d;
+function placeGhost(g, x, y, a) {
+  const now = performance.now(), dts = (now - g.lt) / 1000;
+  x = clamp(num(x, g.tx), 0, W); y = clamp(num(y, g.ty), 0, W);
+  if (g.lt && dts > 0 && dts < .5) { g.vx = (x - g.tx) / dts; g.vy = (y - g.ty) / dts; }
+  if (!g.lt) { g.x = x; g.y = y; }
+  g.tx = x; g.ty = y; g.lt = now; g.ang = num(a, g.ang);
+}
+function ghostDied(g, killer) {
+  const key = (match ? match.id : '') + g.key;
+  if (killer && killer === myPeer && !counted.has(key)) { counted.add(key); me.kills++; }
+  addFeed(killer ? `${nameOfCode(killer)} eliminated ${g.name}` : `${g.name} was lost to the storm`, killer === myPeer);
+  for (let i = 0; i < 14; i++) parts.push({ x: g.x, y: g.y, vx: rnd(-180, 180), vy: rnd(-180, 180), t: rnd(.3, .6), k: 'bit', c: `hsl(${g.hue} 45% 62%)` });
+  dropRandom(g.x, g.y, .1);
+}
+
+function pushShot(p, g, r) {
+  if (!mp || !match) return;
+  if (p !== me && !(p.bot && !p.remote)) return;
+  myShots.push([++shotSeq, p === me ? 0 : '#' + p.id, p.x | 0, p.y | 0, Math.round(p.ang * 1000), g, r]);
+  if (myShots.length > 20) myShots.shift();
+}
+function readShots(peer, list, ownerOf) {
+  if (!Array.isArray(list)) return;
+  let last = seenShots.get(peer);
+  const top = list.reduce((m, s) => Math.max(m, num(s && s[0])), 0);
+  if (last === undefined) { seenShots.set(peer, top); return; }   // don't replay shots from before we arrived
+  for (const s of list) {
+    if (!Array.isArray(s) || num(s[0]) <= last) continue;
+    const own = ownerOf(s[1]); if (!own || !own.alive) continue;
+    const x = num(s[2]), y = num(s[3]), a = num(s[4]) / 1000, g = s[5], r = clamp(num(s[6]) | 0, 0, 3);
+    if (g === 'f') { own.swingT = .18; own.side ^= 1; punchFrom(own, x, y, a); }
+    else if (GUNS[g]) spawnShot(own, x, y, a, g, r);
+  }
+  seenShots.set(peer, Math.max(last, top));
+}
+
+function processPeers() {
+  const ps = peersSnap;
+  const mine = ps.find(p => p.sameTab); if (mine) myPeer = mine.peer;
+  if (!mp || !myPeer) return;
+  const members = ps.filter(p => p.kind === 'viewer' && p.presence && p.presence.v === 1);
+  const running = members.filter(p => p.presence.mt && p.presence.mt.id);
+  const pool = running.length ? running : members;
+  hostPeer = pool.length ? pool.map(p => p.peer).sort()[0] : myPeer;
+  if (netMode === 'lobby') renderLobby(members);
+
+  const host = members.find(p => p.peer === hostPeer), hm = host && host.presence.mt;
+  if (hostPeer !== myPeer && hm && typeof hm.id === 'string') {
+    if (!match || match.id !== hm.id) {           // follow the host into their match
+      match = { id: hm.id, seed: num(hm.seed) | 0 };
+      beginMatch(match.seed, false); netMode = 'play';
+      gameT = num(hm.t);
+    }
+    if (Math.abs(gameT - num(hm.t, gameT)) > .6) gameT = num(hm.t, gameT);
+    if (Array.isArray(hm.bn)) botNames = hm.bn.map(n => String(n).slice(0, 16));
+  }
+  if (!match || state === 'menu' || state === 'lobby') return;
+
+  const seen = new Set();
+  for (const p of members) {
+    if (p.sameTab) continue;
+    const pr = p.presence;
+    if (pr.m !== match.id || (pr.mode !== 'play' && pr.mode !== 'over')) continue;
+    // the human themselves
+    let g = ghosts.get(p.peer);
+    if (!g) { g = mkGhost(p.peer, false); g.alive = !!pr.al; ghosts.set(p.peer, g); }
+    seen.add(p.peer);
+    g.name = String(pr.n || 'Player').slice(0, 14); g.hue = num(pr.hue); g.hp = num(pr.hp, 100); g.sh = num(pr.sh);
+    placeGhost(g, pr.x, pr.y, pr.a); setHeld(g, pr.h);
+    if (g.alive && !pr.al) { g.alive = false; ghostDied(g, typeof pr.dk === 'string' ? pr.dk : null); }
+    else if (!g.alive && pr.al) g.alive = true;
+    // the host's bots
+    if (p.peer === hostPeer && Array.isArray(pr.b)) {
+      hostSeen = true;
+      for (const b of pr.b) {
+        if (!Array.isArray(b)) continue;
+        const key = '#' + (num(b[0]) | 0);
+        let bg = ghosts.get(key);
+        if (!bg) { bg = mkGhost(key, true); bg.id = num(b[0]) | 0; bg.alive = !!b[7]; ghosts.set(key, bg); }
+        seen.add(key);
+        bg.name = botNames[bg.id] || 'Bot'; bg.hp = num(b[4], 100); bg.sh = num(b[5]); bg.hue = num(b[8]);
+        placeGhost(bg, b[1], b[2], num(b[3]) / 100); setHeld(bg, b[6]);
+        if (bg.alive && !b[7]) { bg.alive = false; ghostDied(bg, typeof b[9] === 'string' ? b[9] : null); }
+      }
+    }
+    readShots(p.peer, pr.s, o => o === 0 ? g : typeof o === 'string' ? ghosts.get(o) : null);
+  }
+  for (const k of [...ghosts.keys()]) if (!seen.has(k)) ghosts.delete(k);
+}
+
+function netTick() {
+  if (!mp || !room) return;
+  const pr = { v: 1, n: myName(), mode: netMode, m: match ? match.id : null, x: null, y: null, a: null, hp: null, sh: null, al: null, hue: null, h: null, dk: null, s: null, mt: null, b: null };
+  if (match && me && (netMode === 'play' || netMode === 'over')) {
+    Object.assign(pr, { x: me.x | 0, y: me.y | 0, a: Math.round(me.ang * 100) / 100, hp: Math.ceil(Math.max(0, me.hp)), sh: Math.ceil(me.sh), al: me.alive ? 1 : 0, hue: me.hue | 0, h: heldCode(me), dk: me.alive ? null : (me.killer || null), s: myShots });
+    if (amHost()) {
+      pr.mt = { id: match.id, seed: match.seed, t: Math.round(gameT * 10) / 10, bn: botNames };
+      pr.b = players.filter(p => p.bot).map(p => [p.id, p.x | 0, p.y | 0, Math.round(p.ang * 100), Math.ceil(Math.max(0, p.hp)), Math.ceil(p.sh), heldCode(p), p.alive ? 1 : 0, p.hue | 0, p.killer || 0]);
+    }
+  }
+  room.presence(pr).catch(() => {});
+}
+
+function renderLobby(members) {
+  const list = $('lobbyList'); list.textContent = '';
+  const sorted = members.slice().sort((a, b) => a.peer < b.peer ? -1 : 1);
+  for (const p of sorted) {
+    const row = document.createElement('div');
+    const n = document.createElement('span'); n.textContent = String(p.presence.n || 'Player').slice(0, 14) + (p.sameTab ? ' (you)' : '');
+    const tag = document.createElement('em');
+    tag.textContent = p.peer === hostPeer ? 'Host' : p.presence.mode === 'play' ? 'In a match' : p.presence.mode === 'over' ? 'Spectating' : 'Ready';
+    row.append(n, tag); list.appendChild(row);
+  }
+  const host = amHost(), hostRow = members.find(p => p.peer === hostPeer);
+  $('lobbyStart').hidden = !host;
+  $('lobbyMsg').textContent = host
+    ? (members.length > 1 ? `${members.length} players here. Start when everyone's in.` : 'Send this page to a friend. When they tap Play with friends, they show up here.')
+    : `Waiting for ${hostRow ? String(hostRow.presence.n || 'the host').slice(0, 14) : 'the host'} to start the match.`;
+}
+
+function enterLobby() {
+  if (!room) return;
+  mp = true; netMode = 'lobby'; match = null; state = 'lobby';
+  $('menu').hidden = true; $('over').hidden = true; $('hud').hidden = true; $('lobby').hidden = false;
+  $('lobbyMsg').textContent = 'Connecting…'; $('lobbyList').textContent = ''; $('lobbyStart').hidden = true;
+  netTick(); processPeers();
+}
+function hostStart() {
+  match = { id: Math.random().toString(36).slice(2, 10), seed: (Math.random() * 2 ** 31) | 0 };
+  beginMatch(match.seed, true); netMode = 'play'; hostSeen = true;
+  netTick();
+}
+function leaveNet() {
+  if (mp && room) room.presence({ v: null, n: null, mode: null, m: null, x: null, y: null, a: null, hp: null, sh: null, al: null, hue: null, h: null, dk: null, s: null, mt: null, b: null }).catch(() => {});
+  mp = false; netMode = null; match = null; ghosts.clear();
+}
+function toMenu() {
+  leaveNet(); state = 'menu';
+  for (const id of ['over', 'lobby', 'hud']) $(id).hidden = true;
+  $('menu').hidden = false;
+}
+
+// Outside Claude: the same room interface over the game's own WebSocket server (server.js).
+// Add ?room=yourcode to the address to get a private lobby.
+function wsRoom() {
+  return new Promise(resolve => {
+    const code = (new URLSearchParams(location.search).get('room') || 'main').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || 'main';
+    let ws, myId = null, done = false, dirty = false;
+    const mine = {}, subs = [], errs = [];
+    const finish = v => { if (!done) { done = true; resolve(v); } };
+    try { ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?room=${code}`); } catch (e) { return finish(null); }
+    const shim = {
+      presence(patch) { for (const k in patch) { if (patch[k] === null) delete mine[k]; else mine[k] = patch[k]; } dirty = true; return Promise.resolve(); },
+      onPeers(fn, onErr) { subs.push(fn); if (onErr) errs.push(onErr); return () => {}; }
+    };
+    const timer = setInterval(() => { if (dirty && ws.readyState === 1) { ws.send(JSON.stringify({ t: 'p', p: mine })); dirty = false; } }, 50);
+    ws.onmessage = e => {
+      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (m.t === 'hello') { myId = m.id; finish(shim); return; }
+      if (m.t !== 's' || !Array.isArray(m.peers)) return;
+      const peers = m.peers.map(([id, pr]) => ({ peer: id, presence: id === myId ? mine : (pr || {}), kind: 'viewer', sameTab: id === myId, isMe: id === myId, by: null, guest: false }));
+      if (!peers.some(p => p.sameTab)) peers.push({ peer: myId, presence: mine, kind: 'viewer', sameTab: true, isMe: true, by: null, guest: false });
+      for (const f of subs) f({ peers, joined: [], left: [], updated: [] });
+    };
+    ws.onclose = () => { clearInterval(timer); finish(null); for (const f of errs) f({ code: 'revoked', message: 'Disconnected from the game server' }); };
+    setTimeout(() => finish(null), 5000);
+  });
+}
+
+(async () => {
+  try {
+    let r = null;
+    if (window.claude && typeof window.claude.use === 'function') r = await window.claude.use('room');
+    else if (/^https?:$/.test(location.protocol) && typeof WebSocket === 'function') r = await wsRoom();
+    if (!r) return;
+    room = r;
+    $('mpBtn').hidden = false;
+    room.onPeers(ch => { peersSnap = ch.peers; processPeers(); }, () => { room = null; $('mpBtn').hidden = true; if (mp) toMenu(); });
+  } catch (e) { /* solo only */ }
+})();
+
+gen(1); zone = null; me = null;
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (state === 'play' || (mp && state === 'over' && match)) update(dt);
+  if (mp && state === 'over') netMode = 'over';
+  if (mp) netTick();
+  if (state === 'menu' || state === 'lobby') { cam.x = W / 2 + Math.cos(now / 9000) * 900; cam.y = W / 2 + Math.sin(now / 9000) * 900; }
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>

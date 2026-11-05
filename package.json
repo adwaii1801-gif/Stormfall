@@ -1,0 +1,9 @@
+{
+  "name": "stormfall-royale",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Top-down battle royale you can play with friends in the browser.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
